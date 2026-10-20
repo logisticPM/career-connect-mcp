@@ -20,9 +20,9 @@ async function sendLink(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; sent?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; sent?: string; error?: string; failed?: string }>;
 }) {
-  const { next, sent, error } = await searchParams;
+  const { next, sent, error, failed } = await searchParams;
   return (
     <main>
       <h1>Sign in to Career Connect</h1>
@@ -44,6 +44,7 @@ export default async function LoginPage({
         </form>
       )}
       {error && <p style={{ color: "#b00020" }}>Could not send the link: {error}</p>}
+      {failed && <p style={{ color: "#b00020" }}>Sign-in did not complete: {failed} Request a new link below.</p>}
     </main>
   );
 }
