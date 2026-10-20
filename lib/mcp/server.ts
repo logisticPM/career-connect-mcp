@@ -41,6 +41,10 @@ function run<A>(fn: (d: h.Deps, args: A) => Promise<unknown>) {
 
 // --- schemas -------------------------------------------------------------
 
+// Every tool declares an input schema, even an empty one: without it the SDK
+// calls the handler as (ctx) instead of (args, ctx), and run() would lose the
+// caller's auth info.
+const noArgs = z.object({});
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const shortText = z.string().max(300);
 
@@ -126,6 +130,7 @@ export function registerCareerConnect(server: McpServer) {
     {
       title: "Get profile",
       description: "The user's career profile: background, strengths, gaps, and target roles, industries and companies.",
+      inputSchema: noArgs,
       annotations: READ,
     },
     run((d) => h.getProfile(d)),
@@ -218,6 +223,7 @@ export function registerCareerConnect(server: McpServer) {
       title: "Export my data",
       description:
         "Give the user a link to download all of their data as JSON after signing in. The data itself is not returned in the chat.",
+      inputSchema: noArgs,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     run((d) => h.exportData(d)),
