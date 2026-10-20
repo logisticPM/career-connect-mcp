@@ -29,7 +29,6 @@ export class UserError extends Error {}
 
 export const MAX_BULK = 20;
 const PREVIEW_PAGE = 50;
-const EXPORT_TTL_MS = 10 * 60_000;
 
 /** Drops keys whose value is undefined so a patch never blanks a field by omission. */
 function defined<T extends object>(obj: T): Partial<T> {
@@ -188,14 +187,15 @@ export async function getMonthlySummary(d: Deps, month?: string) {
 
 // --- data rights -------------------------------------------------------------
 
-/** The full export never passes through the chat: the user gets a one-time download link instead. */
+/**
+ * The full export never passes through the chat. The user downloads it in a
+ * browser after signing in, so no bearer link exists that could leak.
+ */
 export async function exportData(d: Deps) {
-  const token = await d.repo.createExportToken(d.userId, EXPORT_TTL_MS);
-  await d.repo.appendAudit(d.userId, "export_link_created");
+  await d.repo.appendAudit(d.userId, "export_link_shown");
   return {
-    downloadUrl: `${d.appUrl}/api/export/${token}`,
-    expiresInMinutes: EXPORT_TTL_MS / 60_000,
-    note: "Open the link in a browser. It works once.",
+    downloadUrl: `${d.appUrl}/export`,
+    note: "Open the link in a browser and sign in with the same email to download all your data as JSON.",
   };
 }
 

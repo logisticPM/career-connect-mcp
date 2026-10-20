@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import {
   DEFAULT_SETTINGS,
   EMPTY_PROFILE,
@@ -24,7 +24,6 @@ interface UserData {
 /** In-process store for development and tests. Data is lost on restart. */
 export class MemoryRepository implements Repository {
   private users = new Map<string, UserData>();
-  private exportTokens = new Map<string, { userId: string; expiresAt: number }>();
 
   constructor(private now: () => Date = () => new Date()) {}
 
@@ -105,18 +104,5 @@ export class MemoryRepository implements Repository {
 
   async listAudit(userId: string) {
     return structuredClone(this.user(userId).audit);
-  }
-
-  async createExportToken(userId: string, ttlMs: number) {
-    const token = randomBytes(24).toString("base64url");
-    this.exportTokens.set(token, { userId, expiresAt: this.now().getTime() + ttlMs });
-    return token;
-  }
-
-  async redeemExportToken(token: string) {
-    const entry = this.exportTokens.get(token);
-    this.exportTokens.delete(token);
-    if (!entry || entry.expiresAt < this.now().getTime()) return undefined;
-    return entry.userId;
   }
 }

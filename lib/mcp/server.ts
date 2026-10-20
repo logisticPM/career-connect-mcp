@@ -1,5 +1,6 @@
 import type { AuthInfo, McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { appUrl } from "@/lib/app-url";
 import { resolveUserId, UnauthorizedError } from "@/lib/auth";
 import { todayIn } from "@/lib/domain/dates";
 import { REVEALABLE_FIELDS } from "@/lib/domain/mask";
@@ -12,15 +13,10 @@ interface RequestContext {
   http?: { authInfo?: AuthInfo };
 }
 
-function appUrl(): string {
-  if (process.env.APP_URL) return process.env.APP_URL;
-  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  return "http://localhost:3000";
-}
-
 async function depsFor(ctx: unknown): Promise<h.Deps> {
-  const repo = getRepository();
-  const userId = resolveUserId((ctx as RequestContext | undefined)?.http?.authInfo);
+  const authInfo = (ctx as RequestContext | undefined)?.http?.authInfo;
+  const repo = getRepository(authInfo);
+  const userId = resolveUserId(authInfo);
   const settings = await repo.getSettings(userId);
   return { repo, userId, settings, today: todayIn(settings.timezone), appUrl: appUrl() };
 }
@@ -221,7 +217,7 @@ export function registerCareerConnect(server: McpServer) {
     {
       title: "Export my data",
       description:
-        "Create a one-time link to download all of the user's data as JSON. The data itself is not returned in the chat.",
+        "Give the user a link to download all of their data as JSON after signing in. The data itself is not returned in the chat.",
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     run((d) => h.exportData(d)),

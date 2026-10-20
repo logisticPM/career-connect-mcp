@@ -79,12 +79,11 @@ describe("contacts", () => {
 });
 
 describe("export_data", () => {
-  it("returns a one-time link instead of the data", async () => {
-    const { downloadUrl } = await h.exportData(d);
-    const token = downloadUrl.split("/").at(-1)!;
-    expect(downloadUrl).toMatch(/^https:\/\/cc\.example\/api\/export\//);
-    expect(await d.repo.redeemExportToken(token)).toBe("u1");
-    expect(await d.repo.redeemExportToken(token)).toBeUndefined();
+  it("returns a sign-in download page instead of the data", async () => {
+    await h.addContact(d, { name: "Sam Lee", email: "samlee@example.com" });
+    const result = await h.exportData(d);
+    expect(result.downloadUrl).toBe("https://cc.example/export");
+    expect(JSON.stringify(result)).not.toContain("Sam Lee");
   });
 });
 

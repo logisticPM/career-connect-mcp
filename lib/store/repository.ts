@@ -12,7 +12,8 @@ import type {
 /**
  * Storage boundary. Every method is scoped to one user; implementations must
  * never return another user's rows. The memory store backs local development
- * and tests; the Supabase store (row-level security on user_id) backs production.
+ * and tests; the Supabase store backs production, where it queries with the
+ * caller's own access token so row-level security enforces the scoping.
  */
 export interface Repository {
   getProfile(userId: string): Promise<Profile>;
@@ -31,9 +32,4 @@ export interface Repository {
 
   appendAudit(userId: string, action: string, detail?: string): Promise<void>;
   listAudit(userId: string): Promise<AuditEntry[]>;
-
-  /** One-time token for downloading the user's full data outside the chat. */
-  createExportToken(userId: string, ttlMs: number): Promise<string>;
-  /** Returns the user id and invalidates the token; undefined if unknown, used or expired. */
-  redeemExportToken(token: string): Promise<string | undefined>;
 }
