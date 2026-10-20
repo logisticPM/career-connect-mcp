@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { beforeAll, describe, expect, it } from "vitest";
 
 // Applies the real migrations to an in-process Postgres with a minimal stand-in
@@ -12,6 +13,10 @@ const BOB = "00000000-0000-0000-0000-00000000000b";
 const SUPABASE_STUB = `
   create role anon nologin;
   create role authenticated nologin;
+  create role supabase_auth_admin nologin;
+  create schema extensions;
+  create extension pgcrypto schema extensions;
+  revoke all on schema extensions from public;
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.uid() returns uuid language sql stable as
@@ -31,7 +36,7 @@ async function as<T>(userId: string, sql: string, params: unknown[] = []) {
 }
 
 beforeAll(async () => {
-  db = new PGlite();
+  db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(SUPABASE_STUB);
   const dir = join(__dirname, "migrations");
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
@@ -98,5 +103,47 @@ describe("row-level security", () => {
         return tx.query("select * from contacts");
       }),
     ).rejects.toThrow(/permission denied/);
+  });
+});
+
+describe("invite code sign-up hook", () => {
+  /** Calls the hook the way Supabase Auth does: as supabase_auth_admin. */
+  async function hook(inviteCode?: string) {
+    const event = { metadata: { name: "before-user-created" }, user: { email: "new@example.com", user_metadata: inviteCode === undefined ? {} : { invite_code: inviteCode } } };
+    return db.transaction(async (tx) => {
+      await tx.exec("set local role supabase_auth_admin");
+      const { rows } = await tx.query<{ r: Record<string, unknown> }>("select public.hook_require_invite_code($1) as r", [JSON.stringify(event)]);
+      return rows[0].r;
+    });
+  }
+
+  beforeAll(async () => {
+    await db.exec(`
+      insert into private.invite_codes (code_hash, label) values
+        (extensions.crypt('BETA-OK', extensions.gen_salt('bf')), 'current'),
+        (extensions.crypt('BETA-OLD', extensions.gen_salt('bf')), 'retired');
+      update private.invite_codes set revoked_at = now() where label = 'retired';
+    `);
+  });
+
+  it("allows sign-up with a valid code, ignoring surrounding spaces", async () => {
+    expect(await hook("BETA-OK")).toEqual({});
+    expect(await hook("  BETA-OK ")).toEqual({});
+  });
+
+  it("rejects a missing, wrong or retired code with a 403", async () => {
+    for (const code of [undefined, "", "beta-ok", "WRONG", "BETA-OLD"]) {
+      expect(await hook(code)).toMatchObject({ error: { http_code: 403 } });
+    }
+  });
+
+  it("stores only hashes, never the plain code", async () => {
+    const { rows } = await db.query<{ code_hash: string }>("select code_hash from private.invite_codes");
+    expect(rows.every((r) => r.code_hash.startsWith("$2") && !r.code_hash.includes("BETA"))).toBe(true);
+  });
+
+  it("is not callable or readable by app users", async () => {
+    await expect(as(ALICE, `select public.hook_require_invite_code('{}')`)).rejects.toThrow(/permission denied/);
+    await expect(as(ALICE, "select * from private.invite_codes")).rejects.toThrow(/permission denied/);
   });
 });
